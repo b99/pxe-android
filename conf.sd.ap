@@ -1,0 +1,25 @@
+port=0
+#interface=eth0
+interface=wlan0
+bind-interfaces
+#dhcp-range=192.168.0.50,192.168.0.150,12h
+#dhcp-boot=/arch/boot/syslinux/lpxelinux.0
+#dhcp-option-force=209,boot/syslinux/archiso.cfg
+#dhcp-option-force=210,/arch/
+#dhcp-range=192.168.43.100,192.168.43.130,12h
+#dhcp-range=192.169.1.255,proxy
+#dhcp-range=192.169.1.100,proxy
+dhcp-no-override
+dhcp-range=192.168.43.0,proxy
+#dhcp-boot=grldr
+enable-tftp
+tftp-root=/storage/sdcard0/pxe-cyb
+pxe-prompt="Press F8 for menu", 20
+pxe-service=x86PC, "Boot from local disk", 0
+pxe-service=x86PC, "PXE boot pxelinux", pxelinux
+pxe-service=x86PC, "PXE boot grldr", grldr
+
+#user=root
+#group=root
+user=root
+group=sdcard_r

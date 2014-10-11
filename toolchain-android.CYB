@@ -1,0 +1,326 @@
+gmp_ver=5.1.3
+mpfr_ver=3.1.2
+mpc_ver=1.0.2
+isl_ver=0.12.2
+cloog_ver=0.18.1
+binutils_ver=linaro-2.24.0-2014.09
+gcc_ver=linaro-4.9-2014.09
+
+BUILD_DIR=/tmp/build_dir
+mkdir $BUILD_DIR
+mkdir ${BUILD_DIR}/host
+
+bsdtar -xJvf gmp-$gmp_ver.tar.xz -C ${BUILD_DIR}/host
+bsdtar -xJvf mpfr-$mpfr_ver.tar.xz -C ${BUILD_DIR}/host
+bsdtar -xJvf mpc-$mpc_ver.tar.xz -C ${BUILD_DIR}/host
+bsdtar -xJvf isl-$isl_ver.tar.xz -C ${BUILD_DIR}/host
+bsdtar -xJvf cloog-$cloog_ver.tar.xz -C ${BUILD_DIR}/host
+cp mpfr-3.1.2-p8.patch /tmp/
+cp cloog-0.18.1-isl-compat.patch /tmp/
+
+bsdtar -xJvf binutils-$binutils_ver.tar.xz -C ${BUILD_DIR}
+bsdtar -xJvf gcc-$gcc_ver.tar.xz -C ${BUILD_DIR}
+
+PREFIX=/opt/apps/toolchain-android
+HOST_DIR=${BUILD_DIR}/host_lib
+SYSROOT_DIR=${PREFIX}/android
+
+TARGET=arm-linux-androideabi
+
+TARGET_BINUTILS_BUILDDIR=${BUILD_DIR}/binutils-build
+TARGET_GCC_BUILDDIR=${BUILD_DIR}/gcc-build
+
+
+# build gmp
+cd ${BUILD_DIR}/host/gmp-$gmp_ver
+ ./configure  --prefix=${HOST_DIR}  --disable-shared \
+   --enable-cxx
+ make -j3
+ make -j3 check
+ make install
+
+# build mpfr
+cd ${BUILD_DIR}/host/mpfr-$mpfr_ver
+patch -p1 -i /tmp/mpfr-3.1.2-p8.patch
+ ./configure  --prefix=${HOST_DIR}  --disable-shared \
+   --with-gmp=${HOST_DIR}
+ make -j3
+ make -j3 check
+ make install
+
+# build mpc
+cd ${BUILD_DIR}/host/mpc-$mpc_ver
+ ./configure  --prefix=${HOST_DIR}  --disable-shared \
+   --with-gmp=${HOST_DIR} --with-mpfr=${HOST_DIR}
+ make -j3
+ make -j3 check
+ make install
+
+
+# build isl
+cd ${BUILD_DIR}/host/isl-$isl_ver
+ ./configure  --prefix=${HOST_DIR}  --disable-shared \
+   --target=${TARGET} 
+
+ export CFLAGS="${CFLAGS} -I${HOST_DIR}/include" 
+ export CXXFLAGS="${CFLAGS} -I${HOST_DIR}/include" 
+ export LDFLAGS="${LDFLAGS} -L${HOST_DIR}/lib" 
+
+ make -j3
+ make -j3 check
+ make install
+
+# build cloog
+cd ${BUILD_DIR}/host/cloog-$cloog_ver
+patch -p1 -i /tmp/cloog-0.18.1-isl-compat.patch
+ ./configure  --prefix=${HOST_DIR}  --disable-shared \
+   --target=${TARGET} \
+   --disable-nls \
+   --with-gmp-prefix=${HOST_DIR} \
+   --with-isl-prefix=${HOST_DIR}
+
+# make libcloog-isl.la
+# make libcloog-isl.la install
+ make -j3
+ make -j3 check
+ make install
+
+
+
+# build binutils
+mkdir -p $TARGET_BINUTILS_BUILDDIR
+cd $TARGET_BINUTILS_BUILDDIR
+
+ ../binutils-$binutils_ver/configure  --prefix=${PREFIX}  \
+   --target=${TARGET} \
+   --disable-shared --disable-nls \
+   --with-cloog=${HOST_DIR} \
+   --with-isl=${HOST_DIR} \
+   --with-gmp=${HOST_DIR} \
+   --disable-cloog-version-check --disable-isl-version-check \
+   --program-transform-name='s&^&arm-linux-androideabi-&' \
+   --with-sysroot=${SYSROOT_DIR} \
+   --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' \
+   --with-gold-ldflags='-static-libgcc -static-libstdc++' \
+   --enable-install-libbfd \
+   --enable-gold=default
+#   --enable-gold=both/gold
+#   --enable-gold=both/ld
+
+
+ export CFLAGS="${CFLAGS} -I${HOST_DIR}/include" 
+ export CXXFLAGS="${CFLAGS} -I${HOST_DIR}/include" 
+ export LDFLAGS="${LDFLAGS} -L${HOST_DIR}/lib" 
+
+ ../binutils-$binutils_ver/configure  --prefix=${PREFIX}  \
+   --target=${TARGET} \
+   --disable-shared --disable-nls \
+   --with-gmp=${HOST_DIR} --with-mpfr=${HOST_DIR} --with-mpc=${HOST_DIR} \
+   --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' \
+   --with-gold-ldflags='-static-libgcc -static-libstdc++' \
+   --enable-install-libbfd \
+   --enable-gold=no  --with-sysroot=${SYSROOT_DIR} 
+
+
+make -j3
+make install
+
+
+
+# copy bionic headers and libraries to sysroot
+bionic_ver=cm-11.0-XNPH30O-bacon-4f280f505a
+bsdtar -xJvf ~/toolchain/android_bionic-${bionic_ver}.tar.xz -C ${BUILD_DIR}
+cp -R ~/toolchain/bionic_lib ${BUILD_DIR}
+
+install_file ()
+{
+    mkdir -p $2/`dirname $1`
+    cp -fp $1 $2/$1
+}
+
+install_helper ()
+{
+  (cd $1 && find . -type f | while read ff; do install_file $ff $2; done)
+}
+
+LIB_ROOT=${SYSROOT_DIR}/usr/lib
+INCLUDE_ROOT=${SYSROOT_DIR}/usr/include
+BIONIC_ROOT=${BUILD_DIR}/android_bionic-${bionic_ver}
+LIBC_ROOT=$BIONIC_ROOT/libc
+
+# CRT objects
+# crtbegin_static.o, crtbegin_dynamic.o, crtend_android.o
+CRT_OBJS_DIR=${BUILD_DIR}/bionic_lib
+CRT_OBJS="$CRT_OBJS_DIR/crtbegin_dynamic.o \
+   $CRT_OBJS_DIR/crtend_android.o"
+# static libraries
+STATIC_LIBS_DIR=${BUILD_DIR}/bionic_lib
+STATIC_LIBS="$STATIC_LIBS_DIR/libc.a \
+   $STATIC_LIBS_DIR/libm.a \
+   $STATIC_LIBS_DIR/libstdc++.a \
+   $STATIC_LIBS_DIR/libthread_db.a"
+# dynamic libraries 
+DYNAMIC_LIBS_DIR=${BUILD_DIR}/bionic_lib
+DYNAMIC_LIBS="$DYNAMIC_LIBS_DIR/libdl.so \
+   $DYNAMIC_LIBS_DIR/libc.so \
+   $DYNAMIC_LIBS_DIR/libm.so \
+   $DYNAMIC_LIBS_DIR/libstdc++.so \
+   $DYNAMIC_LIBS_DIR/libthread_db.so"
+
+rm -rf $LIB_ROOT
+mkdir -p $LIB_ROOT
+# cp -f $CRT_OBJS $STATIC_LIBS $DYNAMIC_LIBS $LIB_ROOT
+cp -f $CRT_OBJS $DYNAMIC_LIBS $LIB_ROOT
+
+rm -rf $INCLUDE_ROOT
+install_helper $BIONIC_ROOT/libthread_db/include  $INCLUDE_ROOT
+# for libm, just copy math.h and fenv.h
+install $BIONIC_ROOT/libm/include/math.h $INCLUDE_ROOT
+install $BIONIC_ROOT/libm/include/arm/fenv.h $INCLUDE_ROOT
+install_helper $LIBC_ROOT/kernel/arch-arm $INCLUDE_ROOT
+install_helper $LIBC_ROOT/kernel/common $INCLUDE_ROOT
+install_helper $BIONIC_ROOT/libstdc++/include  $INCLUDE_ROOT
+install_helper $LIBC_ROOT/include $INCLUDE_ROOT
+install_helper $LIBC_ROOT/arch-arm/include $INCLUDE_ROOT
+
+
+
+# build gcc 
+mkdir -p $TARGET_GCC_BUILDDIR
+cd $TARGET_GCC_BUILDDIR
+
+# Figure out where to find the ld binary.
+FIND_TARGET_LD=`[ -d ${TARGET_BINUTILS_BUILDDIR}/gold ] && echo "gold" || echo "ld"`
+# We export these insteading when configuring target gcc and newlib
+##TARGET_BINUTILS_EXPORTS= \
+export AS_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/gas/as-new
+export LD_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/${FIND_TARGET_LD}/ld-new
+export AR_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/binutils/ar
+export NM_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/binutils/nm-new
+export STRIP_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/binutils/strip-new
+export RANLIB_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/binutils/ranlib
+export OBJDUMP_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/binutils/objdump
+export READELF_FOR_TARGET=${TARGET_BINUTILS_BUILDDIR}/binutils/readelf
+
+#CFLAGS_FOR_TARGET="-O2 -Os -g -mandroid -DTARGET_POSIX_IO -fno-short-enums"
+#CXXFLAGS_FOR_TARGET=${CFLAGS_FOR_TARGET}
+#LDFLAGS_FOR_TARGET=
+
+#export CFLAGS_FOR_TARGET="${CFLAGS_FOR_TARGET}" 
+#export CXXFLAGS_FOR_TARGET="${CXXFLAGS_FOR_TARGET}" 
+#export LDFLAGS_FOR_TARGET="${LDFLAGS_FOR_TARGET}" 
+
+ ../gcc-$gcc_ver/configure  --prefix=${PREFIX} \
+   --target=${TARGET} \
+   --with-gnu-as --with-gnu-ld \
+   --enable-languages=c,c++ \
+   --with-gmp=${HOST_DIR}  --with-mpfr=${HOST_DIR} \
+   --with-mpc=${HOST_DIR} \
+   --with-cloog=${HOST_DIR} --with-isl=${HOST_DIR} \
+   --program-transform-name='s&^&arm-linux-androideabi-&' \
+   --with-sysroot=${SYSROOT_DIR} \
+   --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm'  \
+   ${GCC_CONFIG_LIBSTDCXX_V3} --disable-libssp \
+   --enable-threads --disable-nls --disable-libmudflap --disable-libgomp \
+   --disable-libstdc__-v3 --disable-sjlj-exceptions \
+   --disable-shared  --disable-tls --disable-libitm \
+   --with-float=softfp --with-fpu=neon --with-arch=armv7-a --enable-target-optspace \
+   --disable-libsanitizer
+
+#   --with-float=soft --with-fpu=vfp --with-arch=armv5te --enable-target-optspace \
+#   --disable-libquadmath --disable-libsanitizer --disable-libatomic
+#   --disable-cloog-version-check --disable-isl-version-check \
+
+# CFLAGS_FOR_TARGET += -DTARGET_POSIX_IO -fno-short-enums
+
+## ifneq ($(target_os),linux-androideabi)
+## GCC_CONFIG_ARGS += --with-abi=aapcs
+
+
+
+## gcc config reference to "android-toolchain-eabi-4.9-2014.06-x86"
+ ../gcc-$gcc_ver/configure  --prefix=${PREFIX} \
+   --target=${TARGET} \
+   --with-gnu-as --with-gnu-ld \
+   --enable-languages=c,c++ \
+   --with-gmp=${HOST_DIR}  --with-mpfr=${HOST_DIR} \
+   --with-mpc=${HOST_DIR} \
+   --disable-nls --disable-libssp --disable-libmudflap \
+   --disable-shared --disable-sjlj-exceptions --disable-libquadmath \
+   --disable-libitm --disable-libsanitizer \
+   --with-float=soft --with-fpu=vfp --with-arch=armv5te --enable-target-optspace \
+   --disable-graphite --disable-docs \
+   --enable-threads --enable-tls --enable-libgomp --enable-libatomic \
+   --disable-libstdc__-v3 \
+   --with-sysroot=${SYSROOT_DIR} \
+   --without-cloog --without-isl
+
+#   --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' \
+#   --with-cloog=${HOST_DIR} --with-isl=${HOST_DIR} \
+#   --disable-libitm --disable-libsanitizer \
+
+
+ make  -j3 \
+   CFLAGS_FOR_TARGET="${CFLAGS_FOR_TARGET}"   \
+   CXXFLAGS_FOR_TARGET="${CXXFLAGS_FOR_TARGET}"   \
+   LDFLAGS_FOR_TARGET="${LDFLAGS_FOR_TARGET}"
+
+ make install
+
+
+
+cd $BIONIC_ROOT/libc/arch-arm/bionic
+CC_FOR_TARGET="${TARGET_GCC_BUILDDIR}/gcc/xgcc \
+   -B ${TARGET_GCC_BUILDDIR}/gcc \
+   -isystem ${TARGET_GCC_BUILDDIR}/gcc/include-fixed \
+   -isystem ${TARGET_GCC_BUILDDIR}/gcc/include"
+$CC_FOR_TARGET  -I../include -I../../include -I../../private -mthumb-interwork -o crtbegin.o -c crtbegin.c
+$CC_FOR_TARGET  -I../include -I../../include -mthumb-interwork -o crtend.o -c crtend.S
+cp crtbegin.o ${SYSROOT_DIR}/usr/lib/crtbegin_dynamic.o
+cp crtend.o ${SYSROOT_DIR}/usr/lib/crtend_android.o
+
+
+
+
+
+
+# build minimal gcc
+cd  ${BUILD_DIR}
+mkdir gcc-minimal-build
+cd ${BUILD_DIR}/gcc-minimal-build
+
+ ${TARGET_BINUTILS_EXPORTS} ; \
+ export CFLAGS_FOR_TARGET="${CFLAGS_FOR_TARGET}" ;  \
+ export CXXFLAGS_FOR_TARGET="${CXXFLAGS_FOR_TARGET}" ;  \
+ export LDFLAGS_FOR_TARGET="${LDFLAGS_FOR_TARGET}" ;  \
+ ../gcc-$gcc_ver/configure  --prefix=${BUILD_DIR}/minimalgcc \
+   --target=${TARGET} \
+   --with-gnu-as --with-gnu-ld \
+   --enable-languages=c,c++ \
+   --with-gmp=${HOST_DIR}  --with-mpfr=${HOST_DIR} \
+   --with-mpc=${HOST_DIR} \
+   --disable-nls --disable-libssp --disable-libmudflap \
+   --disable-shared --disable-sjlj-exceptions --disable-libquadmath \
+   --disable-libitm --disable-libsanitizer \
+   --with-float=soft --with-fpu=vfp --with-arch=armv5te --enable-target-optspace \
+   --disable-graphite --disable-docs \
+   --enable-threads --enable-tls --disable-libgomp --disable-libatomic \
+   --disable-libstdc__-v3
+
+
+ make  -j3 \
+   CFLAGS_FOR_TARGET="${CFLAGS_FOR_TARGET}"   \
+   CXXFLAGS_FOR_TARGET="${CXXFLAGS_FOR_TARGET}"   \
+   LDFLAGS_FOR_TARGET="${LDFLAGS_FOR_TARGET}"  \
+   all-gcc all-target-libgcc 
+
+ make install-gcc install-target-libgcc   
+
+
+
+TARGET_MINIMAL_GCC_EXPORTS= \
+export	CC_FOR_TARGET="${TARGET_GCC_BUILDDIR}/gcc/xgcc \
+   -B ${TARGET_GCC_BUILDDIR}/gcc \
+   -isystem ${TARGET_GCC_BUILDDIR}/gcc/include-fixed \
+   -isystem ${TARGET_GCC_BUILDDIR}/gcc/include"
+

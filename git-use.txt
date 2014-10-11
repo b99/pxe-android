@@ -1,0 +1,72 @@
+
+First creating repository: pxe-android
+$ git clone https://github.com/b99/pxe-android.git
+$ cd pxe-android
+$ git config --global user.name "b99"
+$ git config --global user.email "b_b_99@sina.com"
+$ cp /path/to/files .
+$ git add .
+$ git commit -m "first commit"
+##$ git remote add origin https://github.com/b99/pxe-android.git
+$ git push -u origin master
+
+
+   update files
+$ git mv README.md.orig README.orig.md
+$ git commit -m "Rename"
+##$ git remote add origin https://github.com/b99/pxe-android.git
+$ git push -u origin master
+
+
+   delete files
+$ git rm assets/*
+$ git rm -r album/*
+$ git commit -m  "del assets and album"
+##$ git remote add origin https://github.com/b99/pxe-android.git
+$ git push -u origin gh-pages
+
+
+
+
+
+
+
+-----------------------   Reference   -----------------------
+$ git clone git@github.com:gotgithub/gotgithub.github.io.git
+$ cd gotgithub.github.io/
+$ printf "<h1>GotGitHub's HomePage</h1>It works.\n" > index.html
+$ git add index.html
+$ git commit -m "Homepage test version."
+$ git push origin master
+
+
+----------------------------------------------------
+$ mkdir jekyll_demo
+$ cd jekyll_demo
+$ git init
+$ git checkout --orphan gh-pages
+$ mkdir _layouts
+$ mkdir _posts
+$ git add .
+$ git commit -m "first post"
+$ git remote add origin https://github.com/username/jekyll_demo.git
+$ git push origin gh-pages
+
+
+----------------------------------------------------
+$ git clone git@github.com:gotgithub/helloworld.git
+$ vi README.md
+$ git add README.md
+$ git commit -m "README for this project."
+$ git push origin master
+
+
+$ mkdir helloworld
+$ cd helloworld
+$ git init
+$ git add README.md
+$ git commit -m "README for this project."
+$ git remote add origin git@github.com:gotgithub/helloworld.git
+$ git push -u origin master
+
+
