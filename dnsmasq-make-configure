@@ -1,0 +1,7 @@
+
+toolchain_dir=/opt/apps/toolchain-android
+PATH=$PATH:${toolchain_dir}/bin
+make  PREFIX=/tmp/dnsmasq_bin \
+CC=arm-linux-androideabi-gcc \
+CFLAGS="-march=armv7-a -mfpu=neon" \
+LDFLAGS=-llog

@@ -1,5 +1,0 @@
-make  PREFIX=/tmp/dnsmasq_bin \
-CC=/opt/apps/toolchain-android/bin/arm-linux-androideabi-gcc \
-CFLAGS="-march=armv7-a -mfpu=neon" \
-LDFLAGS=-llog
-
